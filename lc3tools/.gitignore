@@ -1,0 +1,11 @@
+*.o
+*~
+lex.lc3.c
+lex.lc3convert.c
+
+lc3sim*
+lc3as
+lc3convert
+*.obj
+*.sym
+Makefile

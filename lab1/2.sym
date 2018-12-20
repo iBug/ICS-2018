@@ -1,0 +1,24 @@
+// Symbol table
+// Scope level 0:
+//	Symbol Name       Page Address
+//	----------------  ------------
+//	S0                3006
+//	BOTH_EVEN         300A
+//	R0_ODD_S0         3018
+//	R0_ODD            301A
+//	R0_ODD_S          301C
+//	R1_ODD_S0         301F
+//	R1_ODD            3021
+//	R1_ODD_S          3023
+//	R0_SMALLER        3026
+//	BOTH_ODD          302B
+//	R1_SMALLER        3030
+//	FILL_TWO          3058
+//	F2_LOOP           305A
+//	F2_LOOP_COND      305C
+//	END               305D
+//	FAIL_R0           305E
+//	FAIL_R1           3065
+//	NOT_ONE           306A
+//	TABLE             306D
+
