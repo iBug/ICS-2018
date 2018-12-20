@@ -1,20 +1,21 @@
 def func(n, a, b, c, d, e, f)
   int t, x, y
-  t = GETC()
-  t += -48
-  t += a
-  t += b
-  t += c
-  t += d
-  t += e
-  t += f
-  n - 1
+  _ = GETC()
+  _ += -48
+  _ += a
+  _ += b
+  _ += c
+  _ += d
+  _ += e
+  _ += f
+  t = _
+  _ = n - 1
   positive
     _ = n
-    _ -= 1
+    _ += -1
     x = func(_, a, b, c, d, e, f)
     _ = n
-    _ -= 2
+    _ += -2
     y = func(_, a, b, c, d, e, f)
     _ = x
     _ += y
@@ -25,16 +26,16 @@ def func(n, a, b, c, d, e, f)
     _ = t
     return
   end
-end
+done
 
 def main()
   int n
   n = GETC()
   n += -48
   _ = func(n, 0, 0, 0, 0, 0, 0)
-end
+done
 
 begin
   _ = main()
   HALT()
-end
+done
