@@ -45,6 +45,7 @@ def compile_branch(name, body, vardict, line):
 
 
 def compile_func(name, args, body):
+    print(f"compile {name}{args}\n{body}")
     output = [func_label(name)]
     return output
 
@@ -58,45 +59,49 @@ def compile_lc3(lines):
     begin = None
     blocks = []
     lines_iter = iter(lines)
-    while True:
-        # Scan for a function header, or "begin"
-        match = None
-        while match is None:
-            line = next(lines_iter)
-            match = RE.def_func.match(line) or RE.begin_block.match(line)
-        header = match.capturesdict()
-
-        # Now grab the body
-        match = None
-        body = []
+    try:
         while True:
-            line = next(lines_iter)
-            match = RE.done_block.match(line)
-            if match is None:
-                body.append(line)
-                continue
-            else:
-                break
+            # Scan for a function header, or "begin"
+            match = None
+            while match is None:
+                line = next(lines_iter)
+                match = RE.def_func.match(line) or RE.begin_block.match(line)
+            header = match
 
-        if "keyword" in header.capturesdict():  # this is a "begin" block
-            begin = compile_begin(body)
-        else:
-            name = header.group("name")
-            args = header.captures("args")
-            compiled = compile_func(name, args, body)
-            blocks.append(compiled)
+            # Now grab the body
+            match = None
+            body = []
+            while True:
+                line = next(lines_iter)
+                match = RE.done_block.match(line)
+                if match is None:
+                    body.append(line)
+                    continue
+                else:
+                    break
+
+            if "keyword" in header.capturesdict():  # this is a "begin" block
+                begin = compile_begin(body)
+            else:
+                name = header.group("name")
+                args = header.captures("args")
+                compiled = compile_func(name, args, body)
+                blocks.append(compiled)
+    except StopIteration:
+        pass  # file done
 
     # TODO: Assemble the compiled stuff
 
 
 def main():
     with open(INFILE, "r") as f:
-        lines = [line.strip() for line in f]
+        lines = [line.rstrip() for line in f]
 
     compiled = compile_lc3(lines)
 
     with open(OUTFILE, "w") as f:
-        print("\n".join(compiled), file=f)
+        pass
+        # print("\n".join(compiled), file=f)
 
 
 if __name__ == "__main__":
