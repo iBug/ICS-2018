@@ -2,7 +2,7 @@
 
 # Parse the arguments...
 
-INSTALL_DIR=`pwd`
+INSTALL_DIR=.
 case $1 in 
 	--installdir) 
 	    INSTALL_DIR=$2 ;

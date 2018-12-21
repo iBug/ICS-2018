@@ -45,8 +45,9 @@ def compile_branch(name, body, vardict, line):
 
 
 def compile_func(name, args, body):
-    print(f"compile {name}{args}\n{body}")
+    print("compile {}({})\nbody\n{}\nend".format(name, ", ".join(args), "\n".join(body)))
     output = [func_label(name)]
+    vardict = {arg: None for arg in args}
     return output
 
 

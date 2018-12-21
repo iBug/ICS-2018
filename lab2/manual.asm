@@ -1,0 +1,8 @@
+.ORIG x3000
+    LD R6, STACK_BASE
+    JSR MAIN
+    HALT
+
+STACK_BASE
+    .FILL xFDFF
+.END
