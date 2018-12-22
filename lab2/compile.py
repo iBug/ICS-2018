@@ -88,7 +88,7 @@ def compile_func(name, args, body):
     # Start with a label
     output = [func_label(name)]
     arg_count = len(args)
-    vardict = {arg: arg_count - ind for ind, arg in enumerate(args)}
+    vardict = {arg: ind for ind, arg in enumerate(args, 1)}
 
     # First count the local variables
     localvars = {}
@@ -217,7 +217,7 @@ def compile_func(name, args, body):
                 if reverse:
                     s = "STR R1, R6, #{}".format(var_pos)
                 else:
-                    s = "STR R1, R6, #{}".format(var_pos)
+                    s = "STR R0, R6, #{}".format(var_pos)
                 add_instruction(output, s, comment)
             continue
 
