@@ -10,13 +10,12 @@ def func(n, a, b, c, d, e, f)
   _ += f
   t = _
   _ = n + -1
-  positive
+  if positive
     _ = n + -1
     x = func(_, a, b, c, d, e, f)
     _ = n + -2
     y = func(_, a, b, c, d, e, f)
-    _ = x
-    _ += y
+    _ = x + y
     _ += t
     _ += -1
     return
@@ -33,7 +32,4 @@ def main()
   _ = func(n, 0, 0, 0, 0, 0, 0)
 done
 
-begin
-  _ = main()
-  HALT()
-done
+start main
