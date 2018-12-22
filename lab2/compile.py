@@ -14,7 +14,7 @@ INS_FORMAT_S_RAW = "{}"
 
 
 class RE:
-    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:\s|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
+    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
     decl_vars = regex.compile(r"^\s*int\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*")
     func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)\s*$")
 

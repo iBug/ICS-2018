@@ -25,7 +25,7 @@ def func(n, a, b, c, d, e, f)
   end
 done
 
-def main()
+def main
   int n
   n = GETC()
   n += -48
