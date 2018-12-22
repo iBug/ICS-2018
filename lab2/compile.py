@@ -15,7 +15,7 @@ INS_FORMAT_S_RAW = "{}"
 
 class RE:
     def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
-    decl_vars = regex.compile(r"^\s*int\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*")
+    decl_vars = regex.compile(r"^\s*int\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*\s*$")
     func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)\s*$")
 
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
@@ -33,7 +33,7 @@ class RE:
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
     SPECIAL_KEYWORDS = ["start", "done"]
     start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
-    done_block = regex.compile(r"^(?P<keyword>done)")
+    done_block = regex.compile(r"^(?P<keyword>done)\s*$")
 
     imm = regex.compile(r"(?<![-\d])-?\d+\b")
 
