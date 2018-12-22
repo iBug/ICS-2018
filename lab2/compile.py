@@ -157,12 +157,22 @@ def compile_func(name, args, body):
 
             if source != "_":  # Load source to R1
                 if imm is not None:  # Handle immediate numbers
-                    if -16 <= imm < 16:
+                    if -64 <= imm <= 60:
                         comment = "Reset R1 to 0"
                         s = "AND R1, R1, #0"
                         add_instruction(output, s, comment)
-                        if imm != 0:
-                            comment = "Assign R1 = imm({})".format(imm)
+
+                        comment = "Assign R1 = imm({})".format(imm)
+                        if imm > 0:
+                            while imm > 15:
+                                add_instruction(output, "ADD R1, R1, #15")
+                                imm -= 15
+                            s = "ADD R1, R1, #{}".format(imm)
+                            add_instruction(output, s, comment)
+                        elif imm < 0:
+                            while imm < -16:
+                                add_instruction(output, "ADD R1, R1, #-16")
+                                imm += 16
                             s = "ADD R1, R1, #{}".format(imm)
                             add_instruction(output, s, comment)
                     else:  # Immediate number too big
@@ -259,12 +269,23 @@ def compile_func(name, args, body):
 
             # Load s2 to R2
             if imm is not None:  # Handle immediate numbers
-                if -16 <= imm < 16:
+                if -64 <= imm <= 60:
                     comment = "Reset R2 to 0"
                     s = "AND R2, R2, #0"
                     add_instruction(output, s, comment)
-                    if imm != 0:
-                        comment = "Assign R2 = imm({})".format(imm)
+
+                    # Expand numbers between -64 and +60
+                    comment = "Assign R2 = imm({})".format(imm)
+                    if imm > 0:
+                        while imm > 15:
+                            add_instruction(output, "ADD R2, R2, #15")
+                            imm -= 15
+                        s = "ADD R2, R2, #{}".format(imm)
+                        add_instruction(output, s, comment)
+                    elif imm < 0:
+                        while imm < -16:
+                            add_instruction(output, "ADD R2, R2, #-16")
+                            imm += 16
                         s = "ADD R2, R2, #{}".format(imm)
                         add_instruction(output, s, comment)
                 else:  # Immediate number too big
@@ -396,12 +417,22 @@ def compile_func(name, args, body):
                 elif RE.imm.match(call_arg):
                     # Call argument is an immediate number
                     imm = int(call_arg)
-                    if -16 <= imm < 16:
+                    if -64 <= imm <= 60:
                         comment = "Reset R1 to 0"
                         s = "AND R1, R1, #0"
                         add_instruction(output, s, comment)
-                        if imm != 0:
-                            comment = "Assign R1 = imm({})".format(imm)
+
+                        comment = "Assign R1 = imm({})".format(imm)
+                        if imm > 0:
+                            while imm > 15:
+                                add_instruction(output, "ADD R1, R1, #15")
+                                imm -= 15
+                            s = "ADD R1, R1, #{}".format(imm)
+                            add_instruction(output, s, comment)
+                        elif imm < 0:
+                            while imm < -16:
+                                add_instruction(output, "ADD R1, R1, #-16")
+                                imm += 16
                             s = "ADD R1, R1, #{}".format(imm)
                             add_instruction(output, s, comment)
                     else:  # Immediate number too big
@@ -409,6 +440,7 @@ def compile_func(name, args, body):
                         need_imm.add(imm)
                         s = "LD R1, {}".format(imm_label(name, imm))
                         add_instruction(output, s, comment)
+
                     comment = "Push imm({}) to stack as argument {}".format(imm, arg_index)
                     s = "STR R1, R6, #{}".format(arg_index - call_arg_count - 1)
                     add_instruction(output, s, comment)
@@ -486,7 +518,7 @@ def compile_func(name, args, body):
         s = ".FILL {}".format(lc3_int(imm))
         output.append(imm_label(name, imm))
         add_instruction(output, s, comment)
-    print("\n".join(output))
+    # print("\n".join(output))
     return output
 
 
@@ -515,7 +547,7 @@ def compile_start(match):
         output.append(imm_label(name, imm))
         add_instruction(output, s, comment)
 
-    print("\n".join(output))
+    # print("\n".join(output))
     return output
 
 
