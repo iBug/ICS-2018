@@ -18,7 +18,7 @@ class RE:
     decl_vars = regex.compile(r"^\s*int\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*")
     func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)\s*$")
 
-    TRAPS = {"GETC": 32, "HALT": 37}
+    TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
     trap_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
 
     CONDITIONS = ["positive", "zero", "negative", "p", "n", "z"]
