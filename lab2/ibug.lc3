@@ -23,13 +23,13 @@ def func(n, a, b, c, d, e, f)
     _ = t
     return
   end
-done
+end
 
 def main
   var n
   n = GETC()
   n += -48
   _ = func(n, 0, 0, 0, 0, 0, 0)
-done
+end
 
 start main

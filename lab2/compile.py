@@ -20,13 +20,14 @@ INS_FORMAT_S_RAW = "{}"
 class RE:
     def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
     decl_vars = regex.compile(r"^\s*var\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*\s*$")
-    func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)\s*$")
+    func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+|-?\d+)(?:\s*,\s*(?P<args>\w+|-?\d+))*)?\)\s*$")
 
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
     trap_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
 
     CONDITIONS = ["positive", "zero", "negative", "p", "n", "z"]
     branch = regex.compile(r"^\s*if\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
+    loop = regex.compile(r"^\s*while\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
 
     SELF_OPERATORS = ["=", "+=", "&=", "~="]
     self_op = regex.compile(r"^\s*(?P<target>\w+)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
@@ -35,11 +36,11 @@ class RE:
 
     KEYWORDS = ["return", "else", "end"]
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
-    SPECIAL_KEYWORDS = ["start", "done"]
     start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
-    end_func = regex.compile(r"^(?P<keyword>done)\s*$")
 
     imm = regex.compile(r"(?<![-\d])-?\d+\b")
+
+    increase_level = [branch, loop]  # These statements increast cognitive depth
 
 
 LABEL_PREFIX = "I_"
@@ -628,11 +629,21 @@ def compile_lc3(lines):
             # Now grab the body
             match = None
             body = []
+            depth = 0
             while True:
                 line_no, line = next(lines_iter)
-                match = RE.end_func.match(line)
-                if match is not None:  # Stop on "done"
-                    break
+                for deepen_re in RE.increase_level:
+                    match = deepen_re.match(line)
+                    if match is not None:  # ifs and whiles increase cognitive depth
+                        depth += 1
+                        break
+                else:
+                    match = RE.keyword_only.match(line)
+                    if match and match.group("keyword") == "end":
+                        if depth == 0:  # matching "end" found
+                            break
+                        else:
+                            depth -= 1
                 body.append(line)
                 continue
 
