@@ -99,6 +99,14 @@ def add_instruction(container, s, comment=""):
             container.append(INS_FORMAT_RAW.format(s))
 
 
+def check_stack_overflow(output):
+    comment = "Add the inverse of predefined stack top"
+    add_instruction(output, "ADD R1, R6, R5", comment)
+    comment = "Check for stack overflow"
+    s = "BRn {}".format(error_label("stack overflow"))
+    add_instruction(output, s, comment)
+
+
 def load_variable(output, target, vardict, varname):
     assert isinstance(output, list) and isinstance(vardict, dict)
     assert regex.match("(?i)^R[0-7]$", target)
@@ -173,11 +181,7 @@ def compile_func(name, args, body):
     add_instruction(output, s, comment)
 
     # Check stack overflow
-    comment = "Add the inverse of predefined stack top"
-    add_instruction(output, "ADD R1, R6, R5", comment)
-    comment = "Check for stack overflow"
-    s = "BRn {}".format(error_label("stack overflow"))
-    add_instruction(output, s, comment)
+    check_stack_overflow(output)
 
     # Assign memory for local variables
     i = 0
@@ -559,11 +563,7 @@ def compile_func(name, args, body):
             add_instruction(output, s, comment)
 
             # Check stack overflow
-            comment = "Add the inverse of predefined stack top"
-            add_instruction(output, "ADD R1, R6, R5", comment)
-            comment = "Check for stack overflow"
-            s = "BRn {}".format(error_label("stack overflow"))
-            add_instruction(output, s, comment)
+            check_stack_overflow(output)
 
             # Go Go Go!!!
             comment = "Call function \"{}\"".format(call_name)
