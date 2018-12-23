@@ -40,7 +40,7 @@ class RE:
 
     imm = regex.compile(r"(?<![-\d])-?\d+\b")
 
-    increase_level = [branch, loop]  # These statements increast cognitive depth
+    increase_level = [branch, loop]  # These statements increase cognitive depth
 
 
 LABEL_PREFIX = "I_"
@@ -151,7 +151,7 @@ def create_imm(name, output, need_imm, target, imm):
         add_instruction(output, s, comment)
 
 
-def compile_func(name, args, body):
+def compile_func(name, args, body, starting_lineno):
     print("compile {}({})".format(name, ", ".join(args)))
 
     # Start with a label
@@ -161,7 +161,7 @@ def compile_func(name, args, body):
 
     # First count the local variables
     localvars = {}
-    for i, line in enumerate(body, 1):
+    for i, line in enumerate(body, starting_lineno + 1):
         match = RE.decl_vars.match(line)
         if match:
             print("Declared variables: [{}] {}".format(i, ", ".join(match.captures("vars"))))
@@ -184,10 +184,8 @@ def compile_func(name, args, body):
     check_stack_overflow(output)
 
     # Assign memory for local variables
-    i = 0
-    for key, value in localvars.items():
-        i += 1
-        vardict[key] = i
+    for index, (key, value) in enumerate(localvars.items(), 1):
+        vardict[key] = index
 
     #########################################
     ## Here comes the most exhaustive part ##
@@ -197,7 +195,7 @@ def compile_func(name, args, body):
     from_end = {}
     loop_end = {}
 
-    for i, line in enumerate(body, 1):
+    for i, line in enumerate(body, starting_lineno + 1):
         # Ignore comments
         if line.lstrip()[0] == "#":
             continue
@@ -377,8 +375,8 @@ def compile_func(name, args, body):
                             i_end = line_no
                             break
             # Register the correspondence of "else" and "end"
-            from_else[i_else] = i
-            from_end[i_end] = i
+            from_else[starting_lineno + i_else] = i
+            from_end[starting_lineno + i_end] = i
 
             # Prepare the left operand
             load_variable(output, "R1", vardict, s1)
@@ -477,7 +475,7 @@ def compile_func(name, args, body):
             add_instruction(end_inst, s, comment)
 
             # Register the correspondence of "end" and save these prepared instructions
-            loop_end[i_end] = (i, end_inst)
+            loop_end[starting_lineno + i_end] = (i, end_inst)
 
             # Generate branch instruction here
             comment = "Go to loop condition check"
@@ -700,6 +698,7 @@ def compile_lc3(lines):
                 line_no, line = next(lines_iter)
                 match = RE.def_func.match(line) or RE.start_statement.match(line)
             header = match
+            header_lineno = line_no
 
             if "keyword" in header.capturesdict():  # this is a "start" statement
                 start = compile_start(header)
@@ -730,7 +729,7 @@ def compile_lc3(lines):
             if name == "start":
                 raise ValueError("Function name cannot be \"start\"")
             args = header.captures("args")
-            compiled = compile_func(name, args, body)
+            compiled = compile_func(name, args, body, header_lineno)
             blocks.append(compiled)
     except StopIteration:
         pass  # file done
