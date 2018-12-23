@@ -541,29 +541,7 @@ def compile_func(name, args, body):
                 elif RE.imm.match(call_arg):
                     # Call argument is an immediate number
                     imm = int(call_arg)
-                    if -64 <= imm <= 60:
-                        comment = "Reset R1 to 0"
-                        s = "AND R1, R1, #0"
-                        add_instruction(output, s, comment)
-
-                        comment = "Assign R1 = imm({})".format(imm)
-                        if imm > 0:
-                            while imm > 15:
-                                add_instruction(output, "ADD R1, R1, #15")
-                                imm -= 15
-                            s = "ADD R1, R1, #{}".format(imm)
-                            add_instruction(output, s, comment)
-                        elif imm < 0:
-                            while imm < -16:
-                                add_instruction(output, "ADD R1, R1, #-16")
-                                imm += 16
-                            s = "ADD R1, R1, #{}".format(imm)
-                            add_instruction(output, s, comment)
-                    else:  # Immediate number too big
-                        comment = "Load R1 = imm({})".format(imm)
-                        need_imm.add(imm)
-                        s = "LD R1, {}".format(imm_label(name, imm))
-                        add_instruction(output, s, comment)
+                    create_imm(name, output, need_imm, "R1", imm)
 
                     comment = "Push imm({}) to stack as argument {}".format(imm, arg_index)
                     s = "STR R1, R6, #{}".format(arg_index - call_arg_count - 1)
