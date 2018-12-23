@@ -36,6 +36,7 @@ class RE:
 
     KEYWORDS = ["return", "else", "end"]
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
+    func_return = regex.compile(r"^\s*return\s*(?P<target>(?P<imm>-?\d+)|\w+)?\s*$")
     start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
 
     identifier = regex.compile(r"^(?!\d|_*$)\w+$")
@@ -125,18 +126,18 @@ def store_variable(output, target, vardict, varname, comment=None):
     add_instruction(output, s, comment)
 
 
-def create_imm(name, output, need_imm, target, imm):
+def create_imm(name, output, need_imm, target, imm, comment=None):
     assert isinstance(output, list) and isinstance(need_imm, set)
     assert regex.match("(?i)^R[0-7]$", target)
     target = target.upper()
 
     # Expand numbers between -64 and 60
     if -64 <= imm <= 60:
-        comment = "Reset {} to 0".format(target)
+        temp_comment = "Reset {} to 0".format(target)
         s = "AND {0}, {0}, #0".format(target)
-        add_instruction(output, s, comment)
+        add_instruction(output, s, temp_comment)
 
-        comment = "Assign {} = imm({})".format(target, imm)
+        comment = comment or "Assign {} = imm({})".format(target, imm)
         if imm > 0:
             s = "ADD {0}, {0}, #15".format(target)
             while imm > 15:
@@ -152,7 +153,7 @@ def create_imm(name, output, need_imm, target, imm):
             s = "ADD {0}, {0}, #{1}".format(target, imm)
             add_instruction(output, s, comment)
     else:  # Immediate number too big
-        comment = "Load {} = imm({})".format(target, imm)
+        comment = comment or "Load {} = imm({})".format(target, imm)
         need_imm.add(imm)
         s = "LD {}, {}".format(target, imm_label(name, imm))
         add_instruction(output, s, comment)
@@ -609,6 +610,23 @@ def compile_func(name, args, body, starting_lineno):
                 comment = "Store return value of {} to {}".format(call_name, target)
                 store_variable(output, "R0", vardict, target, comment)
             continue
+
+        match = RE.func_return.match(line)
+        if match:
+            target = match.group("target")
+            imm = match.group("imm")
+            if target and target != "_":
+                if imm is not None:
+                    imm = int(imm)
+                    comment = "Load imm({}) as return value".format(imm)
+                    create_imm(name, output, need_imm, "R0", imm, comment)
+                else:
+                    comment = "Load {} as return value".format(target)
+                    load_variable(output, "R0", vardict, target)
+
+            comment = "Go to end of function \"{}\"".format(name)
+            s = "BRnzp {}".format(end_func_label(name))
+            add_instruction(output, s, comment)
 
         match = RE.keyword_only.match(line)
         if match:

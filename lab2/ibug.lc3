@@ -19,8 +19,7 @@ def func(n, a, b, c, d, e, f)
     _ += -1
     return
   else
-    _ = t
-    return
+    return t
   end
 end
 
