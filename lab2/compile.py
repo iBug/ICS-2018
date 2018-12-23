@@ -102,6 +102,7 @@ def add_instruction(container, s, comment=""):
 def load_variable(output, target, vardict, varname):
     assert isinstance(output, list) and isinstance(vardict, dict)
     assert regex.match("(?i)^R[0-7]$", target)
+    target = target.upper()
     comment = "Load var \"{}\"".format(varname)
     var_pos = vardict[varname]  # Lookup from vardict
     s = "LDR {}, R6, #{}".format(target, var_pos)
@@ -223,18 +224,15 @@ def compile_func(name, args, body):
                 if imm is not None:  # Handle immediate numbers
                     create_imm(name, output, need_imm, "R1", imm)
                 else:
-                    var_pos = vardict[source]
-
                     # Special handling for "_ = x"
                     if target == "_" and op == "=":
                         comment = "Load var \"{}\" to _".format(source)
+                        var_pos = vardict[source]
                         s = "LDR R0, R6, #{}".format(var_pos)
                         add_instruction(output, s, comment)
                         continue
                     else:
-                        comment = "Load var \"{}\"".format(source)
-                        s = "LDR R1, R6, #{}".format(var_pos)
-                    add_instruction(output, s, comment)
+                        load_variable(output, "R1", vardict, source)
 
             # Perform the operation
             if op == "=":
@@ -301,30 +299,19 @@ def compile_func(name, args, body):
                 var_pos = vardict[target]
                 if op not in {"=", "~="}:  # Not plain assignment or inverse
                     # Load variable first
-                    comment = "Load var \"{}\"".format(target)
-                    if reverse:
-                        s = "LDR R1, R6, #{}".format(var_pos)
-                    else:
-                        s = "LDR R0, R6, #{}".format(var_pos)
-                    add_instruction(output, s, comment)
+                    load_variable(output, "R1" if reverse else "R0", vardict, target)
             else:  # target is R0:
                 pass
 
             # Load s1 to R1
             if s1 != "_":
-                var_pos = vardict[s1]
-                comment = "Load var \"{}\"".format(s1)
-                s = "LDR R1, R6, #{}".format(var_pos)
-                add_instruction(output, s, comment)
+                load_variable(output, "R1", vardict, s1)
 
             # Load s2 to R2
             if imm is not None:  # Handle immediate numbers
                 create_imm(name, output, need_imm, "R2", imm)
             else:
-                comment = "Load var \"{}\"".format(s2)
-                var_pos = vardict[s2]
-                s = "LDR R2, R6, #{}".format(var_pos)
-                add_instruction(output, s, comment)
+                load_variable(output, "R2", vardict, s2)
 
             # Perform the operation
             if op == "+":
@@ -390,10 +377,7 @@ def compile_func(name, args, body):
             from_end[i_end] = i
 
             # Prepare the left operand
-            comment = "Load var \"{}\"".format(s1)
-            var_pos = vardict[s1]
-            s = "LDR R1, R6, #{}".format(var_pos)
-            add_instruction(output, s, comment)
+            load_variable(output, "R1", vardict, s1)
 
             # Prepare the right operand
             if imm is not None:  # right operand is immediate value
@@ -401,10 +385,7 @@ def compile_func(name, args, body):
                 create_imm(name, output, need_imm, "R2", -imm)
             else:
                 # Load value
-                comment = "Load var \"{}\"".format(s2)
-                var_pos = vardict[s2]
-                s = "LDR R2, R6, #{}".format(var_pos)
-                add_instruction(output, s, comment)
+                load_variable(output, "R2", vardict, s2)
 
                 # Manually inverse R2
                 comment = "Inverse {}".format(s2)
@@ -453,13 +434,11 @@ def compile_func(name, args, body):
                         break
                 else:
                     t = RE.keyword_only.match(body[line_no - 1])
-                    if t:
+                    if t and t.group("keyword") == "end":
                         if depth > 0:  # Not matching
-                            if t.group("keyword") == "end":
-                                depth -= 1
+                            depth -= 1
                             continue
-                        # Haha, matching keyword found
-                        if t.group("keyword") == "end":
+                        else:  # Matching
                             i_end = line_no
                             break
 
@@ -470,21 +449,14 @@ def compile_func(name, args, body):
             end_inst = []
 
             # Prepare the left operand
-            comment = "Load var \"{}\"".format(s1)
-            var_pos = vardict[s1]
-            s = "LDR R1, R6, #{}".format(var_pos)
-            add_instruction(end_inst, s, comment)
+            load_variable(end_inst, "R1", vardict, s1)
 
             # Prepare the right operand
             if imm is not None:  # right operand is immediate value
                 # Go directly for the inverse of the immediate value
                 create_imm(name, end_inst, need_imm, "R2", -imm)
             else:
-                # Load value
-                comment = "Load var \"{}\"".format(s2)
-                var_pos = vardict[s2]
-                s = "LDR R2, R6, #{}".format(var_pos)
-                add_instruction(end_inst, s, comment)
+                load_variable(end_inst, "R2", vardict, s2)
 
                 # Manually inverse R2
                 comment = "Inverse {}".format(s2)
@@ -503,7 +475,7 @@ def compile_func(name, args, body):
             # Register the correspondence of "end" and save these prepared instructions
             loop_end[i_end] = (i, end_inst)
 
-            # Generate branch instruction
+            # Generate branch instruction here
             comment = "Go to loop condition check"
             s = "BRnzp {}".format(loop_cond_label(name, i))
             add_instruction(output, s, comment)
@@ -597,10 +569,7 @@ def compile_func(name, args, body):
                     s = "STR R1, R6, #{}".format(arg_index - call_arg_count - 1)
                     add_instruction(output, s, comment)
                 else:
-                    comment = "Load var \"{}\"".format(call_arg)
-                    var_pos = vardict[call_arg]
-                    s = "LDR R1, R6, #{}".format(var_pos)
-                    add_instruction(output, s, comment)
+                    load_variable(output, "R1", vardict, call_arg)
 
                     comment = "Push {} to stack as argument {}".format(call_arg, arg_index)
                     s = "STR R1, R6, #{}".format(arg_index - call_arg_count - 1)
