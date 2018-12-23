@@ -18,7 +18,7 @@ INS_FORMAT_S_RAW = "{}"
 
 
 class RE:
-    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
+    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
     decl_vars = regex.compile(r"^\s*var\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*\s*$")
     func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)\s*$")
 
@@ -27,7 +27,6 @@ class RE:
 
     CONDITIONS = ["positive", "zero", "negative", "p", "n", "z"]
     branch = regex.compile(r"^\s*if\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
-    loop = regex.compile(r"^\s*while\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
 
     SELF_OPERATORS = ["=", "+=", "&=", "~="]
     self_op = regex.compile(r"^\s*(?P<target>\w+)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
@@ -38,7 +37,7 @@ class RE:
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
     SPECIAL_KEYWORDS = ["start", "done"]
     start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
-    done_block = regex.compile(r"^(?P<keyword>done)\s*$")
+    end_func = regex.compile(r"^(?P<keyword>done)\s*$")
 
     imm = regex.compile(r"(?<![-\d])-?\d+\b")
 
@@ -68,6 +67,10 @@ def imm_label(name, value):
     else:
         number = str(value)
     return LABEL_PREFIX + "IMM_{}_{}".format(name.upper(), number)
+
+
+def error_label(name):
+    return LABEL_PREFIX + "ERR_" + name.upper().replace(" ", "_")
 
 
 def lc3_int(value, pad=True):
@@ -116,6 +119,13 @@ def compile_func(name, args, body):
     comment = "Make {} space for local variables".format(localvar_count)
     add_instruction(output, s, comment)
 
+    # Check stack overflow
+    comment = "Add the inverse of predefined stack top"
+    add_instruction(output, "ADD R1, R6, R5", comment)
+    comment = "Check for stack overflow"
+    s = "BRn {}".format(error_label("stack overflow"))
+    add_instruction(output, s, comment)
+
     # Assign memory for local variables
     i = 0
     for key, value in localvars.items():
@@ -130,6 +140,9 @@ def compile_func(name, args, body):
     from_end = {}
 
     for i, line in enumerate(body, 1):
+        # Ignore comments
+        if line.lstrip()[0] == "#":
+            continue
         # Compile every single line
         add_instruction(output, "; " + line.strip())
 
@@ -186,9 +199,17 @@ def compile_func(name, args, body):
                         s = "LD R1, {}".format(imm_label(name, imm))
                         add_instruction(output, s, comment)
                 else:
-                    comment = "Load var \"{}\"".format(source)
                     var_pos = vardict[source]
-                    s = "LDR R1, R6, #{}".format(var_pos)
+
+                    # Special handling for "_ = x"
+                    if target == "_" and op == "=":
+                        comment = "Load var \"{}\" to _".format(source)
+                        s = "LDR R0, R6, #{}".format(var_pos)
+                        add_instruction(output, s, comment)
+                        continue
+                    else:
+                        comment = "Load var \"{}\"".format(source)
+                        s = "LDR R1, R6, #{}".format(var_pos)
                     add_instruction(output, s, comment)
 
             # Perform the operation
@@ -197,7 +218,7 @@ def compile_func(name, args, body):
                     comment = "Store R0 to {}".format(target)
                     var_pos = vardict[target]
                     s = "STR R0, R6, #{}".format(var_pos)
-                else:
+                elif target != "_":
                     comment = "Assign {1} to {0}".format(target, source)
                     if reverse:
                         s = "ADD R1, R0, #0"
@@ -464,6 +485,13 @@ def compile_func(name, args, body):
             s = "ADD R6, R6, #{}".format(-call_arg_count - 1)
             add_instruction(output, s, comment)
 
+            # Check stack overflow
+            comment = "Add the inverse of predefined stack top"
+            add_instruction(output, "ADD R1, R6, R5", comment)
+            comment = "Check for stack overflow"
+            s = "BRn {}".format(error_label("stack overflow"))
+            add_instruction(output, s, comment)
+
             # Go Go Go!!!
             comment = "Call function \"{}\"".format(call_name)
             s = "JSR {}".format(func_label(call_name))
@@ -527,15 +555,36 @@ def compile_func(name, args, body):
     return output
 
 
+def compile_stack_overflow():
+    output = [error_label("stack_overflow")]
+
+    # Print a predefined error message
+    s = "LEA R0, {}".format(error_label("stack_overflow_text"))
+    add_instruction(output, s, "Load error message")
+
+    trap_name, trap_id = "PUTS", 34
+    comment = "TRAP to {} ({})".format(lc3_int(trap_id, False), trap_name)
+    s = "TRAP {}".format(lc3_int(trap_id, False))
+    add_instruction(output, s, comment)
+
+    add_instruction(output, "HALT")
+    output.append(error_label("stack_overflow_text"))
+    add_instruction(output, ".STRINGZ \"Stack overflow detected!\"", "Predefined error message")
+    return output
+
+
 def compile_start(match):
     print("compile start statement")
     name = "START"
     stack_bottom = -513
+    stack_top = stack_bottom - 511
     output = []
-    need_imm = {stack_bottom}
+    need_imm = {stack_bottom, -stack_top}  # Stack top is inversed for faster subtraction
 
     s = "LD R6, {}".format(imm_label(name, stack_bottom))
     add_instruction(output, s, "Initialize stack")
+    s = "LD R5, {}".format(imm_label(name, -stack_top))
+    add_instruction(output, s, "Initialize stack limit")
 
     # Call the entry function
     entry = match.group("name")
@@ -552,6 +601,9 @@ def compile_start(match):
         output.append(imm_label(name, imm))
         add_instruction(output, s, comment)
 
+    # Append the stack overflow handler code
+    output.extend(compile_stack_overflow())
+
     # print("\n".join(output))
     return output
 
@@ -559,13 +611,13 @@ def compile_start(match):
 def compile_lc3(lines):
     start = None
     blocks = []
-    lines_iter = iter(lines)
+    lines_iter = iter(enumerate(lines, 1))
     try:
         while True:
             # Scan for a function header, or "start"
             match = None
             while match is None:
-                line = next(lines_iter)
+                line_no, line = next(lines_iter)
                 match = RE.def_func.match(line) or RE.start_statement.match(line)
             header = match
 
@@ -577,14 +629,16 @@ def compile_lc3(lines):
             match = None
             body = []
             while True:
-                line = next(lines_iter)
-                match = RE.done_block.match(line)
+                line_no, line = next(lines_iter)
+                match = RE.end_func.match(line)
                 if match is not None:  # Stop on "done"
                     break
                 body.append(line)
                 continue
 
             name = header.group("name")
+            if name == "start":
+                raise ValueError("Function name cannot be \"start\"")
             args = header.captures("args")
             compiled = compile_func(name, args, body)
             blocks.append(compiled)
