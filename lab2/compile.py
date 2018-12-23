@@ -99,6 +99,15 @@ def add_instruction(container, s, comment=""):
             container.append(INS_FORMAT_RAW.format(s))
 
 
+def load_variable(output, target, vardict, varname):
+    assert isinstance(output, list) and isinstance(vardict, dict)
+    assert regex.match("(?i)^R[0-7]$", target)
+    comment = "Load var \"{}\"".format(varname)
+    var_pos = vardict[varname]  # Lookup from vardict
+    s = "LDR {}, R6, #{}".format(target, var_pos)
+    add_instruction(output, s, comment)
+
+
 def create_imm(name, output, need_imm, target, imm):
     assert isinstance(output, list) and isinstance(need_imm, set)
     assert regex.match("(?i)^R[0-7]$", target)
@@ -204,16 +213,9 @@ def compile_func(name, args, body):
                 if source == "_":  # R0 is occupied, use R1
                     reverse = True
 
-                # Lookup variables
-                var_pos = vardict[target]  # Stack offset of target variable
+                # Load target variable
                 if op not in {"=", "~="}:  # Not plain assignment or inverse
-                    # Load variable first
-                    comment = "Load var \"{}\"".format(target)
-                    if reverse:
-                        s = "LDR R1, R6, #{}".format(var_pos)
-                    else:
-                        s = "LDR R0, R6, #{}".format(var_pos)
-                    add_instruction(output, s, comment)
+                    load_variable(output, "R1" if reverse else "R0", vardict, target)
             else:  # target is R0:
                 pass
 
@@ -510,6 +512,7 @@ def compile_func(name, args, body):
             continue
 
         # TRAP must be placed before function call because they are otherwise identical
+        # or TRAP may be picked up as a function call
         match = RE.trap_call.match(line)
         if match:
             # Throw own R7 onto stack
@@ -520,6 +523,11 @@ def compile_func(name, args, body):
             target = match.group("target")
             trap_name = match.group("name")
             trap_id = RE.TRAPS[trap_name]
+            trap_args = match.captures("args")
+
+            # Process arguments
+            if len(trap_args) > 0 and trap_args[0] != "_":  # Probably don't need to process _ (aka R0)
+                load_variable(output, "R0", vardict, trap_args[0])
 
             # Generate TRAP
             comment = "TRAP to {} ({})".format(lc3_int(trap_id, False), trap_name)
