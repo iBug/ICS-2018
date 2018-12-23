@@ -18,26 +18,27 @@ INS_FORMAT_S_RAW = "{}"
 
 
 class RE:
-    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
-    decl_vars = regex.compile(r"^\s*var\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*\s*$")
-    func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+|-?\d+)(?:\s*,\s*(?P<args>\w+|-?\d+))*)?\)\s*$")
+    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>[^\W\d]\w*)(?:\s*,\s*(?P<args>[^\W\d]\w*))*)?\)?\s*$")
+    decl_vars = regex.compile(r"^\s*var\s+(?P<vars>[^\W\d]\w*)(?:\s*,\s*(?P<vars>[^\W\d]\w*))*\s*$")
+    func_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>[^\W\d]\w*)\s*\((?:\s*(?P<args>-?\d+|\w+)(?:\s*,\s*(?P<args>-?\d+|\w+))*)?\)\s*$")
 
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
-    trap_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
+    trap_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
 
     COMPARATORS = {"<": "n", ">": "p", "<=": "nz", ">=": "zp", "==": "z", "!=": "np"}
     branch = regex.compile(r"^\s*if\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
     loop = regex.compile(r"^\s*while\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
 
     SELF_OPERATORS = ["=", "+=", "&=", "~="]
-    self_op = regex.compile(r"^\s*(?P<target>\w+)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
+    self_op = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
     INTRA_OPERATORS = ["+", "&"]
-    intra_op = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<s1>\w+)\s*(?P<op>\L<op>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", op=INTRA_OPERATORS)
+    intra_op = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<s1>\w+)\s*(?P<op>\L<op>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", op=INTRA_OPERATORS)
 
     KEYWORDS = ["return", "else", "end"]
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
     start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
 
+    identifier = regex.compile(r"^(?!\d|_*$)\w+$")
     imm = regex.compile(r"(?<![-\d])-?\d+\b")
 
     increase_level = [branch, loop]  # These statements increase cognitive depth
@@ -208,10 +209,11 @@ def compile_func(name, args, body, starting_lineno):
         if match:
             print("Declared variables: [{}] {}".format(i, ", ".join(match.captures("vars"))))
             for var in match.captures("vars"):
-                if var not in localvars:
-                    localvars[var] = None
-                else:
-                    raise ValueError("Redefinition of local variable {}".format(var))
+                if var in localvars:
+                    raise ValueError("Redefinition of local variable \"{}\" on line {}".format(var, i))
+                elif set(var) == {"_"}:
+                    raise ValueError("Don't define underscore-only variable on line {}".format(i))
+                localvars[var] = None
     localvar_count = len(localvars)
 
     # Shift up argument position (relative)
@@ -329,18 +331,8 @@ def compile_func(name, args, body, starting_lineno):
             if imm is not None:
                 imm = int(imm)
 
-            # Load target to R0
-            if target != "_":
-                if s1 == "_":
-                    reverse = True
-
-                # Lookup variables
-                var_pos = vardict[target]
-                if op not in {"=", "~="}:  # Not plain assignment or inverse
-                    # Load variable first
-                    load_variable(output, "R1" if reverse else "R0", vardict, target)
-            else:  # target is R0:
-                pass
+            # Looks like there's no need to load target
+            pass
 
             # Load s1 to R1
             if s1 != "_":
