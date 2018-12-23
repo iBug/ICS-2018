@@ -9,8 +9,7 @@ def func(n, a, b, c, d, e, f)
   _ += e
   _ += f
   t = _
-  _ = n + -1
-  if positive
+  if n > 1
     _ = n + -1
     x = func(_, a, b, c, d, e, f)
     _ = n + -2

@@ -9,8 +9,8 @@ except ImportError as e:
     print("{}: {}".format(type(e).__name__, str(e)), "Did you install regex from PyPI?\nTry running\n\n    pip3 install regex\n", file=sys.stderr, sep="\n")
     exit(1)
 
-INFILE = "ibug.lc3"
-OUTFILE = "lab2.asm"
+DEFAULT_INFILE = "ibug.lc3"
+DEFAULT_OUTFILE = "lab2.asm"
 INS_FORMAT = "    {:36}; {}"
 INS_FORMAT_RAW = "    {}"
 INS_FORMAT_S = "{:40}; {}"
@@ -25,9 +25,9 @@ class RE:
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
     trap_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
 
-    CONDITIONS = ["positive", "zero", "negative", "p", "n", "z"]
-    branch = regex.compile(r"^\s*if\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
-    loop = regex.compile(r"^\s*while\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
+    COMPARATORS = {"<": "n", ">": "p", "<=": "nz", ">=": "zp", "==": "z", "!=": "np"}
+    branch = regex.compile(r"^\s*if\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
+    loop = regex.compile(r"^\s*while\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
 
     SELF_OPERATORS = ["=", "+=", "&=", "~="]
     self_op = regex.compile(r"^\s*(?P<target>\w+)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
@@ -62,6 +62,14 @@ def branch_end_label(name, number):
     return LABEL_PREFIX + "COND_END_{}_L{}".format(name.upper(), number)
 
 
+def loop_body_label(name, number):
+    return LABEL_PREFIX + "LOOP_BODY_{}_L{}".format(name.upper(), number)
+
+
+def loop_cond_label(name, number):
+    return LABEL_PREFIX + "LOOP_CHECK_{}_L{}".format(name.upper(), number)
+
+
 def imm_label(name, value):
     if value < 0:
         number = "NEG_{}".format(-value)
@@ -89,6 +97,40 @@ def add_instruction(container, s, comment=""):
             container.append(INS_FORMAT.format(s, comment))
         else:
             container.append(INS_FORMAT_RAW.format(s))
+
+
+def create_imm(name, output, need_imm, target, imm):
+    assert isinstance(output, list) and isinstance(need_imm, set)
+    assert regex.match("(?i)^R[0-7]$", target)
+    target = target.upper()
+
+    # Expand numbers between -64 and 60
+    if -64 <= imm <= 60:
+        comment = "Reset {} to 0".format(target)
+        s = "AND {0}, {0}, #0".format(target)
+        add_instruction(output, s, comment)
+
+        # Expand numbers between -64 and +60
+        comment = "Assign {} = imm({})".format(target, imm)
+        if imm > 0:
+            s = "ADD {0}, {0}, #15".format(target)
+            while imm > 15:
+                add_instruction(output, s)
+                imm -= 15
+            s = "ADD {0}, {0}, #{1}".format(target, imm)
+            add_instruction(output, s, comment)
+        elif imm < 0:
+            s = "ADD {0}, {0}, #-16".format(target)
+            while imm < -16:
+                add_instruction(output, s)
+                imm += 16
+            s = "ADD {0}, {0}, #{1}".format(target, imm)
+            add_instruction(output, s, comment)
+    else:  # Immediate number too big
+        comment = "Load {} = imm({})".format(target, imm)
+        need_imm.add(imm)
+        s = "LD {}, {}".format(target, imm_label(name, imm))
+        add_instruction(output, s, comment)
 
 
 def compile_func(name, args, body):
@@ -139,6 +181,7 @@ def compile_func(name, args, body):
     need_imm = set()  # What big immediate numbers are needed?
     from_else = {}
     from_end = {}
+    loop_end = {}
 
     for i, line in enumerate(body, 1):
         # Ignore comments
@@ -176,29 +219,7 @@ def compile_func(name, args, body):
 
             if source != "_":  # Load source to R1
                 if imm is not None:  # Handle immediate numbers
-                    if -64 <= imm <= 60:
-                        comment = "Reset R1 to 0"
-                        s = "AND R1, R1, #0"
-                        add_instruction(output, s, comment)
-
-                        comment = "Assign R1 = imm({})".format(imm)
-                        if imm > 0:
-                            while imm > 15:
-                                add_instruction(output, "ADD R1, R1, #15")
-                                imm -= 15
-                            s = "ADD R1, R1, #{}".format(imm)
-                            add_instruction(output, s, comment)
-                        elif imm < 0:
-                            while imm < -16:
-                                add_instruction(output, "ADD R1, R1, #-16")
-                                imm += 16
-                            s = "ADD R1, R1, #{}".format(imm)
-                            add_instruction(output, s, comment)
-                    else:  # Immediate number too big
-                        comment = "Load R1 = imm({})".format(imm)
-                        need_imm.add(imm)
-                        s = "LD R1, {}".format(imm_label(name, imm))
-                        add_instruction(output, s, comment)
+                    create_imm(name, output, need_imm, "R1", imm)
                 else:
                     var_pos = vardict[source]
 
@@ -296,30 +317,7 @@ def compile_func(name, args, body):
 
             # Load s2 to R2
             if imm is not None:  # Handle immediate numbers
-                if -64 <= imm <= 60:
-                    comment = "Reset R2 to 0"
-                    s = "AND R2, R2, #0"
-                    add_instruction(output, s, comment)
-
-                    # Expand numbers between -64 and +60
-                    comment = "Assign R2 = imm({})".format(imm)
-                    if imm > 0:
-                        while imm > 15:
-                            add_instruction(output, "ADD R2, R2, #15")
-                            imm -= 15
-                        s = "ADD R2, R2, #{}".format(imm)
-                        add_instruction(output, s, comment)
-                    elif imm < 0:
-                        while imm < -16:
-                            add_instruction(output, "ADD R2, R2, #-16")
-                            imm += 16
-                        s = "ADD R2, R2, #{}".format(imm)
-                        add_instruction(output, s, comment)
-                else:  # Immediate number too big
-                    comment = "Load R2 = imm({})".format(imm)
-                    need_imm.add(imm)
-                    s = "LD R2, {}".format(imm_label(name, imm))
-                    add_instruction(output, s, comment)
+                create_imm(name, output, need_imm, "R2", imm)
             else:
                 comment = "Load var \"{}\"".format(s2)
                 var_pos = vardict[s2]
@@ -348,48 +346,167 @@ def compile_func(name, args, body):
         # Conditional
         match = RE.branch.match(line)
         if match:
-            # conditions will only contain "n", "z" or "p"
-            conditions = list(set([s[0] for s in match.captures("cond")]))
-            conditions_inv = list(set("nzp") - set(conditions))
-            conditions.sort(key=lambda s: {"n": 0, "z": 1, "p": 2}[s])
-            conditions_inv.sort(key=lambda s: {"n": 0, "z": 1, "p": 2}[s])
-            cond_key = "".join(conditions)
-            cond_key_inv = "".join(conditions_inv)
+            s1 = match.group("s1")
+            operator = match.group("op")
+            s2 = match.group("s2")
+            imm = match.group("imm")
+            if imm:
+                imm = int(imm)
+
+            # Condition key, like BRnzp
+            #                       ^^^
+            cond_key = RE.COMPARATORS[operator]
+            cond_key_inv = list(set("nzp") - set(cond_key))
+            cond_key_inv.sort(key=lambda s: {"n": 0, "z": 1, "p": 2}[s])
+            cond_key_inv = "".join(cond_key_inv)
 
             # Find the corresponding "else" and "end"
             depth = 0
             i_else = None
             i_end = None
             for line_no in range(i + 1, len(body) + 1):
-                t = RE.branch.match(body[line_no - 1])
-                if t:
-                    depth += 1
-                    continue
-                t = RE.keyword_only.match(body[line_no - 1])
-                if t:
-                    if depth > 0:  # Not matching
-                        if t.group("keyword") == "end":
-                            depth -= 1
-                        continue
-                    # Haha, matching found
-                    if t.group("keyword") == "else":
-                        i_else = line_no
-                    elif t.group("keyword") == "end":
-                        i_end = line_no
+                # Another branch or loop should increase depth
+                for deepen_re in RE.increase_level:
+                    if deepen_re.match(body[line_no - 1]):
+                        depth += 1
                         break
-
+                else:
+                    t = RE.keyword_only.match(body[line_no - 1])
+                    if t:
+                        if depth > 0:  # Not matching
+                            if t.group("keyword") == "end":
+                                depth -= 1
+                            continue
+                        # Haha, matching keyword found
+                        if t.group("keyword") == "else":
+                            i_else = line_no
+                        elif t.group("keyword") == "end":
+                            i_end = line_no
+                            break
             # Register the correspondence of "else" and "end"
             from_else[i_else] = i
             from_end[i_end] = i
 
-            # Generate the BR instruction
+            # Prepare the left operand
+            comment = "Load var \"{}\"".format(s1)
+            var_pos = vardict[s1]
+            s = "LDR R1, R6, #{}".format(var_pos)
+            add_instruction(output, s, comment)
+
+            # Prepare the right operand
+            if imm is not None:  # right operand is immediate value
+                # Go directly for the inverse of the immediate value
+                create_imm(name, output, need_imm, "R2", -imm)
+            else:
+                # Load value
+                comment = "Load var \"{}\"".format(s2)
+                var_pos = vardict[s2]
+                s = "LDR R2, R6, #{}".format(var_pos)
+                add_instruction(output, s, comment)
+
+                # Manually inverse R2
+                comment = "Inverse {}".format(s2)
+                add_instruction(output, "NOT R2, R2")
+                add_instruction(output, "ADD R2, R2, #1", comment)
+
+            # Perform the comparison
+            comment = "Compare {} with {}".format(s1, s2)
+            add_instruction(output, "ADD R1, R1, R2", comment)
+
+            # Generate branch instruction
             comment = "Branch when {}".format(cond_key)
             if i_else is None:  # No matching "else"
                 s = "BR{} {}".format(cond_key_inv, branch_end_label(name, i))
             else:
                 s = "BR{} {}".format(cond_key_inv, branch_else_label(name, i))
             add_instruction(output, s, comment)
+            continue
 
+        # Loop
+        match = RE.loop.match(line)
+        if match:
+            s1 = match.group("s1")
+            operator = match.group("op")
+            s2 = match.group("s2")
+            imm = match.group("imm")
+            if imm:
+                imm = int(imm)
+
+            # Condition key, like BRnzp
+            #                       ^^^
+            cond_key = RE.COMPARATORS[operator]
+            cond_key_inv = list(set("nzp") - set(cond_key))
+            cond_key_inv.sort(key=lambda s: {"n": 0, "z": 1, "p": 2}[s])
+            cond_key_inv = "".join(cond_key_inv)
+
+            # Find the corresponding "else" and "end"
+            depth = 0
+            i_else = None
+            i_end = None
+            for line_no in range(i + 1, len(body) + 1):
+                # Another branch or loop should increase depth
+                for deepen_re in RE.increase_level:
+                    if deepen_re.match(body[line_no - 1]):
+                        depth += 1
+                        break
+                else:
+                    t = RE.keyword_only.match(body[line_no - 1])
+                    if t:
+                        if depth > 0:  # Not matching
+                            if t.group("keyword") == "end":
+                                depth -= 1
+                            continue
+                        # Haha, matching keyword found
+                        if t.group("keyword") == "end":
+                            i_end = line_no
+                            break
+
+            # We're going to optimize into tail jump
+            # https://stackoverflow.com/q/47783926/5958455
+
+            # Prepare all the instructions for "end"
+            end_inst = []
+
+            # Prepare the left operand
+            comment = "Load var \"{}\"".format(s1)
+            var_pos = vardict[s1]
+            s = "LDR R1, R6, #{}".format(var_pos)
+            add_instruction(end_inst, s, comment)
+
+            # Prepare the right operand
+            if imm is not None:  # right operand is immediate value
+                # Go directly for the inverse of the immediate value
+                create_imm(name, end_inst, need_imm, "R2", -imm)
+            else:
+                # Load value
+                comment = "Load var \"{}\"".format(s2)
+                var_pos = vardict[s2]
+                s = "LDR R2, R6, #{}".format(var_pos)
+                add_instruction(end_inst, s, comment)
+
+                # Manually inverse R2
+                comment = "Inverse {}".format(s2)
+                add_instruction(end_inst, "NOT R2, R2")
+                add_instruction(end_inst, "ADD R2, R2, #1", comment)
+
+            # Perform the comparison
+            comment = "Compare {} with {}".format(s1, s2)
+            add_instruction(end_inst, "ADD R1, R1, R2", comment)
+
+            # Jump back to loop start if true
+            comment = "Jump back to loop start when {}".format(cond_key)
+            s = "BR{} {}".format(cond_key, loop_body_label(name, i))
+            add_instruction(end_inst, s, comment)
+
+            # Register the correspondence of "end" and save these prepared instructions
+            loop_end[i_end] = (i, end_inst)
+
+            # Generate branch instruction
+            comment = "Go to loop condition check"
+            s = "BRnzp {}".format(loop_cond_label(name, i))
+            add_instruction(output, s, comment)
+
+            output.append(loop_body_label(name, i))
             continue
 
         # TRAP must be placed before function call because they are otherwise identical
@@ -532,9 +649,16 @@ def compile_func(name, args, body):
                 output.append(branch_else_label(name, i_if))
 
             elif keyword == "end":
-                # Generate a label for the "end" of the condition
-                i_if = from_end[i]
-                output.append(branch_end_label(name, i_if))
+                if i in from_end:
+                    # Generate a label for the "end" of the branch
+                    i_if = from_end[i]
+                    output.append(branch_end_label(name, i_if))
+                elif i in loop_end:
+                    i_while, end_inst = loop_end[i]
+                    # Generate a label for the condition check
+                    output.append(loop_cond_label(name, i_while))
+                    # Take the pre-generated instructions and put them here
+                    output.extend(end_inst)
             continue
 
     # Before returning, there are things to do
@@ -660,19 +784,34 @@ def compile_lc3(lines):
     return output
 
 
-def main():
-    print("Input file: {}".format(INFILE))
-    print("Output file: {}".format(OUTFILE))
+def main(infile, outfile):
+    print("Input file: {}".format(infile))
+    print("Output file: {}".format(outfile))
     print()
 
-    with open(INFILE, "r") as f:
+    with open(infile, "r") as f:
         lines = [line.rstrip() for line in f]
 
     compiled = compile_lc3(lines)
 
-    with open(OUTFILE, "w") as f:
+    with open(outfile, "w") as f:
         print("\n".join(compiled), file=f)
 
 
 if __name__ == "__main__":
-    exit(main() or 0)
+    argc = len(sys.argv)
+    if argc == 1:
+        infile = DEFAULT_INFILE
+        outfile = DEFAULT_OUTFILE
+    elif argc == 3:
+        infile = sys.argv[1]
+        outfile = sys.argv[2]
+    else:
+        raise ValueError("Wrong number of arguments")
+
+    if not os.path.isfile(infile):
+        raise OSError("Input file is invalid")
+    elif os.path.exists(outfile) and not os.path.isfile(outfile):
+        raise OSError("Output file is invalid")
+
+    exit(main(infile, outfile) or 0)
