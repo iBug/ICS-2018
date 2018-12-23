@@ -71,10 +71,7 @@ def loop_cond_label(name, number):
 
 
 def imm_label(name, value):
-    if value < 0:
-        number = "NEG_{}".format(-value)
-    else:
-        number = str(value)
+    number = str(value) if value >= 0 else "NEG_{}".format(-value)
     return LABEL_PREFIX + "IMM_{}_{}".format(name.upper(), number)
 
 
@@ -128,7 +125,6 @@ def create_imm(name, output, need_imm, target, imm):
         s = "AND {0}, {0}, #0".format(target)
         add_instruction(output, s, comment)
 
-        # Expand numbers between -64 and +60
         comment = "Assign {} = imm({})".format(target, imm)
         if imm > 0:
             s = "ADD {0}, {0}, #15".format(target)
@@ -151,6 +147,41 @@ def create_imm(name, output, need_imm, target, imm):
         add_instruction(output, s, comment)
 
 
+def add_imm(name, output, need_imm, target, imm, comment=None, temp="R4"):
+    assert isinstance(output, list) and isinstance(need_imm, set)
+    assert regex.match("(?i)^R[0-7]$", target) and regex.match("(?i)^R[0-7]$", temp)
+    target = target.upper()
+    temp = temp.upper()
+    assert target != temp
+
+    comment = comment or "Add imm({}) to {}".format(imm, target)
+
+    # Expand numbers between -64 and 60
+    if -64 <= imm <= 60:
+        if imm > 0:
+            s = "ADD {0}, {0}, #15".format(target)
+            while imm > 15:
+                add_instruction(output, s)
+                imm -= 15
+            s = "ADD {0}, {0}, #{1}".format(target, imm)
+            add_instruction(output, s, comment)
+        elif imm < 0:
+            s = "ADD {0}, {0}, #-16".format(target)
+            while imm < -16:
+                add_instruction(output, s)
+                imm += 16
+            s = "ADD {0}, {0}, #{1}".format(target, imm)
+            add_instruction(output, s, comment)
+    else:  # Use a temporary register to load the too-big immediate number
+        temp_comment = "Load {} = imm({})".format(temp, imm)
+        need_imm.add(imm)
+        s = "LD {}, {}".format(temp, imm_label(name, imm))
+        add_instruction(output, s, temp_comment)
+
+        s = "ADD {0}, {0}, {1}".format(target, temp)
+        add_instruction(output, s, comment)
+
+
 def compile_func(name, args, body, starting_lineno):
     print("compile {}({})".format(name, ", ".join(args)))
 
@@ -158,6 +189,7 @@ def compile_func(name, args, body, starting_lineno):
     output = [func_label(name)]
     arg_count = len(args)
     vardict = {arg: ind for ind, arg in enumerate(args, 1)}
+    need_imm = set()  # What big immediate numbers are needed?
 
     # First count the local variables
     localvars = {}
@@ -176,9 +208,8 @@ def compile_func(name, args, body, starting_lineno):
     for key in vardict:
         vardict[key] += localvar_count
 
-    s = "ADD R6, R6, #{}".format(-localvar_count)
-    comment = "Make {} space for local variables".format(localvar_count)
-    add_instruction(output, s, comment)
+    comment = "Make space for {} local variable{}".format(localvar_count, ["", "s"][localvar_count > 1])
+    add_imm(name, output, need_imm, "R6", -localvar_count, comment, "R1")
 
     # Check stack overflow
     check_stack_overflow(output)
@@ -190,7 +221,6 @@ def compile_func(name, args, body, starting_lineno):
     #########################################
     ## Here comes the most exhaustive part ##
     #########################################
-    need_imm = set()  # What big immediate numbers are needed?
     from_else = {}
     from_end = {}
     loop_end = {}
@@ -213,18 +243,19 @@ def compile_func(name, args, body, starting_lineno):
                 imm = int(imm)
 
             if target != "_":  # One single underscore stands for R0
+                # Handle "x = _"
                 if source == "_":  # R0 is occupied, use R1
                     reverse = True
 
                 # Load target variable
                 if op not in {"=", "~="}:  # Not plain assignment or inverse
                     load_variable(output, "R1" if reverse else "R0", vardict, target)
-            else:  # target is R0:
-                pass
 
             if source != "_":  # Load source to R1
                 if imm is not None:  # Handle immediate numbers
-                    create_imm(name, output, need_imm, "R1", imm)
+                    # Special handling for "x += <imm>"
+                    if op != "+=":
+                        create_imm(name, output, need_imm, "R1", imm)
                 else:
                     # Special handling for "_ = x"
                     if target == "_" and op == "=":
@@ -255,11 +286,15 @@ def compile_func(name, args, body, starting_lineno):
                 else:
                     s = "NOT R0, R1"
             elif op == "+=":
-                comment = "Add {1} to {0}".format(target, source)
-                if reverse:
-                    s = "ADD R1, R1, R0"
+                # Special handling for "x += <imm>"
+                if imm is not None:
+                    add_imm(name, output, need_imm, "R0", imm, None, "R1")
                 else:
-                    s = "ADD R0, R0, R1"
+                    comment = "Add {1} to {0}".format(target, source)
+                    if reverse:
+                        s = "ADD R1, R1, R0"
+                    else:
+                        s = "ADD R0, R0, R1"
             elif op == "+=":
                 comment = "Bitwise AND {1} to {0}".format(target, source)
                 if reverse:
@@ -268,7 +303,8 @@ def compile_func(name, args, body, starting_lineno):
                     s = "AND R0, R0, R1"
             else:
                 raise ValueError("Unknown operator: {!r}".format(op))
-            add_instruction(output, s, comment)
+            if not (op == "+=" and imm is not None):
+                add_instruction(output, s, comment)
 
             # Store result if it's not like "x = _"
             if target != "_" and not (op == "=" and reverse):
@@ -384,7 +420,8 @@ def compile_func(name, args, body, starting_lineno):
             # Prepare the right operand
             if imm is not None:  # right operand is immediate value
                 # Go directly for the inverse of the immediate value
-                create_imm(name, output, need_imm, "R2", -imm)
+                comment = "Compare {} with imm({})".format(s1, s2)
+                add_imm(name, output, need_imm, "R1", -imm, comment, "R2")
             else:
                 # Load value
                 load_variable(output, "R2", vardict, s2)
@@ -394,9 +431,9 @@ def compile_func(name, args, body, starting_lineno):
                 add_instruction(output, "NOT R2, R2")
                 add_instruction(output, "ADD R2, R2, #1", comment)
 
-            # Perform the comparison
-            comment = "Compare {} with {}".format(s1, s2)
-            add_instruction(output, "ADD R1, R1, R2", comment)
+                # Perform the comparison
+                comment = "Compare {} with {}".format(s1, s2)
+                add_instruction(output, "ADD R1, R1, R2", comment)
 
             # Generate branch instruction
             comment = "Branch when {}".format(cond_key)
@@ -557,8 +594,7 @@ def compile_func(name, args, body, starting_lineno):
 
             # Extend the stack
             comment = "Extend stack by {}".format(call_arg_count + 1)
-            s = "ADD R6, R6, #{}".format(-call_arg_count - 1)
-            add_instruction(output, s, comment)
+            add_imm(name, output, need_imm, "R6", -call_arg_count - 1, comment, "R1")
 
             # Check stack overflow
             check_stack_overflow(output)
@@ -595,7 +631,7 @@ def compile_func(name, args, body, starting_lineno):
 
                 # End the previous block
                 comment = "End of branch on line {}".format(i_if)
-                s = "BR {}".format(branch_end_label(name, i_if))
+                s = "BRnzp {}".format(branch_end_label(name, i_if))
                 add_instruction(output, s, comment)
 
                 # Generate a label for the "else" block
@@ -617,8 +653,7 @@ def compile_func(name, args, body, starting_lineno):
     # Before returning, there are things to do
     output.append(end_func_label(name))
     comment = "Restore stack"
-    s = "ADD R6, R6, #{}".format(1 + len(vardict))
-    add_instruction(output, s, comment)
+    add_imm(name, output, need_imm, "R6", 1 + len(vardict), comment, "R1")
 
     # Return
     add_instruction(output, "RET", "Return from {}".format(name))
