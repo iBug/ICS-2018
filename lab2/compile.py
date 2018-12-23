@@ -3,7 +3,11 @@
 import sys
 import os
 
-import regex
+try:
+    import regex
+except ImportError as e:
+    print("{}: {}".format(type(e).__name__, str(e)), "Did you install regex from PyPI?\nTry running\n\n    pip3 install regex\n", file=sys.stderr, sep="\n")
+    exit(1)
 
 INFILE = "ibug.lc3"
 OUTFILE = "lab2.asm"
@@ -15,14 +19,15 @@ INS_FORMAT_S_RAW = "{}"
 
 class RE:
     def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s|\((?=.*\)\s*$))\s*(?:(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)?\s*$")
-    decl_vars = regex.compile(r"^\s*int\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*\s*$")
+    decl_vars = regex.compile(r"^\s*var\s+(?P<vars>\w+)(?:\s*,\s*(?P<vars>\w+))*\s*$")
     func_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\w+)\s*\((?:\s*(?P<args>\w+)(?:\s*,\s*(?P<args>\w+))*)?\)\s*$")
 
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
     trap_call = regex.compile(r"^\s*(?P<target>\w+)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
 
     CONDITIONS = ["positive", "zero", "negative", "p", "n", "z"]
-    branch = regex.compile(r"^\s*if\s+(?P<cond>\L<cond>)(?:\s+or\s+(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
+    branch = regex.compile(r"^\s*if\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
+    loop = regex.compile(r"^\s*while\s+(?P<cond>\L<cond>)(?:\s*(?:\sor\s|,)\s*(?P<cond>\L<cond>))*\s*$", cond=CONDITIONS)
 
     SELF_OPERATORS = ["=", "+=", "&=", "~="]
     self_op = regex.compile(r"^\s*(?P<target>\w+)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
@@ -70,7 +75,7 @@ def lc3_int(value, pad=True):
 
 
 def add_instruction(container, s, comment=""):
-    if s.lstrip()[0] == ".":
+    if s.lstrip()[0] == ".":  # Begins with a dot
         if comment:
             container.append(INS_FORMAT_S.format(s, comment))
         else:
@@ -524,7 +529,7 @@ def compile_func(name, args, body):
 
 def compile_start(match):
     print("compile start statement")
-    name = "__START__"
+    name = "START"
     stack_bottom = -513
     output = []
     need_imm = {stack_bottom}
@@ -591,6 +596,10 @@ def compile_lc3(lines):
 
 
 def main():
+    print("Input file: {}".format(INFILE))
+    print("Output file: {}".format(OUTFILE))
+    print()
+
     with open(INFILE, "r") as f:
         lines = [line.rstrip() for line in f]
 

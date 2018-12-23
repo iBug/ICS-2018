@@ -1,5 +1,5 @@
 def func(n, a, b, c, d, e, f)
-  int t, x, y
+  var t, x, y
   _ = GETC()
   _ += -48
   _ += a
@@ -26,7 +26,7 @@ def func(n, a, b, c, d, e, f)
 done
 
 def main
-  int n
+  var n
   n = GETC()
   n += -48
   _ = func(n, 0, 0, 0, 0, 0, 0)
