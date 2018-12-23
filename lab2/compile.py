@@ -104,13 +104,23 @@ def check_stack_overflow(output):
     add_instruction(output, s, comment)
 
 
-def load_variable(output, target, vardict, varname):
+def load_variable(output, target, vardict, varname, comment=None):
     assert isinstance(output, list) and isinstance(vardict, dict)
     assert regex.match("(?i)^R[0-7]$", target)
     target = target.upper()
-    comment = "Load var \"{}\"".format(varname)
+    comment = comment or "Load var \"{}\"".format(varname)
     var_pos = vardict[varname]  # Lookup from vardict
     s = "LDR {}, R6, #{}".format(target, var_pos)
+    add_instruction(output, s, comment)
+
+
+def store_variable(output, target, vardict, varname, comment=None):
+    assert isinstance(output, list) and isinstance(vardict, dict)
+    assert regex.match("(?i)^R[0-7]$", target)
+    target = target.upper()
+    comment = comment or "Store {} to \"{}\"".format(target, varname)
+    var_pos = vardict[varname]  # Lookup from vardict
+    s = "STR {}, R6, #{}".format(target, var_pos)
     add_instruction(output, s, comment)
 
 
@@ -260,9 +270,7 @@ def compile_func(name, args, body, starting_lineno):
                     # Special handling for "_ = x"
                     if target == "_" and op == "=":
                         comment = "Load var \"{}\" to _".format(source)
-                        var_pos = vardict[source]
-                        s = "LDR R0, R6, #{}".format(var_pos)
-                        add_instruction(output, s, comment)
+                        load_variable(output, "R0", vardict, source, comment)
                         continue
                     else:
                         load_variable(output, "R1", vardict, source)
@@ -270,9 +278,7 @@ def compile_func(name, args, body, starting_lineno):
             # Perform the operation
             if op == "=":
                 if reverse:  # Special handling of "x = _"
-                    comment = "Store R0 to {}".format(target)
-                    var_pos = vardict[target]
-                    s = "STR R0, R6, #{}".format(var_pos)
+                    store_variable(output, "R0", vardict, target)
                 elif target != "_":
                     comment = "Assign {1} to {0}".format(target, source)
                     if reverse:
@@ -309,12 +315,7 @@ def compile_func(name, args, body, starting_lineno):
             # Store result if it's not like "x = _"
             if target != "_" and not (op == "=" and reverse):
                 comment = "Store result to \"{}\"".format(target)
-                var_pos = vardict[target]
-                if reverse:
-                    s = "STR R1, R6, #{}".format(var_pos)
-                else:
-                    s = "STR R0, R6, #{}".format(var_pos)
-                add_instruction(output, s, comment)
+                store_variable(output, "R1" if reverse else "R0", vardict, target, comment)
             continue
 
         match = RE.intra_op.match(line)
@@ -368,6 +369,10 @@ def compile_func(name, args, body, starting_lineno):
                 raise ValueError("Unknown operator: {!r}".format(op))
             add_instruction(output, s, comment)
 
+            # Store result
+            if target != "_":
+                comment = "Store result to \"{}\"".format(target)
+                store_variable(output, "R0", vardict, target)
             continue
 
         # Conditional
@@ -553,9 +558,7 @@ def compile_func(name, args, body, starting_lineno):
             # Store the return value if it's not R0
             if target != "_":
                 comment = "Store trap result to {}".format(target)
-                var_pos = vardict[target]
-                s = "STR R0, R6, #{}".format(var_pos)
-                add_instruction(output, s, comment)
+                store_variable(output, "R0", vardict, target, comment)
             continue
 
         match = RE.func_call.match(line)
@@ -612,9 +615,7 @@ def compile_func(name, args, body, starting_lineno):
             # Store the return value if it's not R0
             if target != "_":
                 comment = "Store return value of {} to {}".format(call_name, target)
-                var_pos = vardict[target]
-                s = "STR R0, R6, #{}".format(var_pos)
-                add_instruction(output, s, comment)
+                store_variable(output, "R0", vardict, target, comment)
             continue
 
         match = RE.keyword_only.match(line)
