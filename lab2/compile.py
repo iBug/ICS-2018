@@ -282,6 +282,7 @@ def compile_func(name, args, body, starting_lineno):
             if op == "=":
                 if reverse:  # Special handling of "x = _"
                     store_variable(output, "R0", vardict, target)
+                    continue
                 elif target != "_":
                     comment = "Assign {1} to {0}".format(target, source)
                     if reverse:
