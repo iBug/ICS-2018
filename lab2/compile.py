@@ -18,12 +18,12 @@ INS_FORMAT_S_RAW = "{}"
 
 
 class RE:
-    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>[^\W\d]\w*)(?:\s*,\s*(?P<args>[^\W\d]\w*))*)?\)?\s*$")
+    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>[^\W\d]\w*)(?:\s*,\s*(?P<args>[^\W\d]\w*))*)?\s*\)?\s*$")
     decl_vars = regex.compile(r"^\s*var\s+(?P<vars>[^\W\d]\w*)(?:\s*,\s*(?P<vars>[^\W\d]\w*))*\s*$")
     func_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>[^\W\d]\w*)\s*\((?:\s*(?P<args>-?\d+|\w+)(?:\s*,\s*(?P<args>-?\d+|\w+))*)?\)\s*$")
 
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
-    trap_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>\w+)?\)\s*$", trap=list(TRAPS))
+    trap_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>-?\d+|\w+)?\)\s*$", trap=list(TRAPS))
 
     COMPARATORS = {"<": "n", ">": "p", "<=": "nz", ">=": "zp", "==": "z", "!=": "np"}
     branch = regex.compile(r"^\s*if\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
@@ -628,6 +628,7 @@ def compile_func(name, args, body, starting_lineno):
             comment = "Go to end of function \"{}\"".format(name)
             s = "BRnzp {}".format(end_func_label(name))
             add_instruction(output, s, comment)
+            continue
 
         match = RE.keyword_only.match(line)
         if match:
