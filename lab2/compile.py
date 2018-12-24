@@ -34,7 +34,7 @@ class RE:
     INTRA_OPERATORS = ["+", "&"]
     intra_op = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<s1>\w+)\s*(?P<op>\L<op>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", op=INTRA_OPERATORS)
 
-    KEYWORDS = ["return", "else", "end"]
+    KEYWORDS = ["else", "end"]
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
     func_return = regex.compile(r"^\s*return\s*(?P<target>(?P<imm>-?\d+)|\w+)?\s*$")
     start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
