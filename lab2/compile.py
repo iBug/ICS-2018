@@ -9,7 +9,7 @@ except ImportError as e:
     print("{}: {}".format(type(e).__name__, str(e)), "Did you install regex from PyPI?\nTry running\n\n    pip3 install regex\n", file=sys.stderr, sep="\n")
     exit(1)
 
-DEFAULT_INFILE = "ibug.lc3"
+DEFAULT_INFILE = "ibug.rb"
 DEFAULT_OUTFILE = "lab2.asm"
 INS_FORMAT = "    {:36}; {}"
 INS_FORMAT_RAW = "    {}"
