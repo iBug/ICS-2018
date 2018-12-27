@@ -18,29 +18,34 @@ INS_FORMAT_S_RAW = "{}"
 
 
 class RE:
-    def_func = regex.compile(r"^def\s+(?P<name>\w+)\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>[^\W\d]\w*)(?:\s*,\s*(?P<args>[^\W\d]\w*))*)?\s*\)?\s*$")
-    decl_vars = regex.compile(r"^\s*var\s+(?P<vars>[^\W\d]\w*)(?:\s*,\s*(?P<vars>[^\W\d]\w*))*\s*$")
-    func_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>[^\W\d]\w*)\s*\((?:\s*(?P<args>-?\d+|\w+)(?:\s*,\s*(?P<args>-?\d+|\w+))*)?\)\s*$")
+    class Basic:
+        imm = r"(?:-?\d+\b)"
+        ident = r"(?i:\b[a-z_]\w*\b)"  # identifier
+        value = r"(?:{imm}|{ident})".format(imm=imm, ident=ident)
+
+    def_func = regex.compile(r"^def\s+(?P<name>{ident})\s*(?:$|\s(?=[^)]*$)|\((?=.*\)\s*$))\s*(?:(?P<args>{ident})(?:\s*,\s*(?P<args>{ident}))*)?\s*\)?\s*$".format(ident=Basic.ident))
+    decl_vars = regex.compile(r"^\s*var\s+(?P<vars>{ident})(?:\s*,\s*(?P<vars>{ident}))*\s*$".format(ident=Basic.ident))
+    func_call = regex.compile(r"^\s*(?P<target>{ident})\s*=\s*(?P<name>{ident})\s*\((?:\s*(?P<args>{value})(?:\s*,\s*(?P<args>{value}))*)?\)\s*$".format(ident=Basic.ident, value=Basic.value))
 
     TRAPS = {"GETC": 32, "OUT": 33, "PUTS": 34, "IN": 35, "PUTSP": 36, "HALT": 37}
-    trap_call = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>-?\d+|\w+)?\)\s*$", trap=list(TRAPS))
+    trap_call = regex.compile(r"^\s*(?P<target>{ident})\s*=\s*(?P<name>\L<trap>)\s*\(\s*(?P<args>{value})?\)\s*$".format(ident=Basic.ident, value=Basic.value), trap=list(TRAPS))
 
     COMPARATORS = {"<": "n", ">": "p", "<=": "nz", ">=": "zp", "==": "z", "!=": "np"}
-    branch = regex.compile(r"^\s*if\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
-    loop = regex.compile(r"^\s*while\s+(?P<s1>\w+)\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", comp=list(COMPARATORS))
+    branch = regex.compile(r"^\s*if\s+(?P<s1>{ident})\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|{ident})\s*$".format(ident=Basic.ident), comp=list(COMPARATORS))
+    loop = regex.compile(r"^\s*while\s+(?P<s1>{ident})\s*(?P<op>\L<comp>)\s*(?P<s2>(?P<imm>-?\d+)|{ident})\s*$".format(ident=Basic.ident), comp=list(COMPARATORS))
 
     SELF_OPERATORS = ["=", "+=", "&=", "~="]
-    self_op = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|\w+)\s*$", op=SELF_OPERATORS)
+    self_op = regex.compile(r"^\s*(?P<target>{ident})\s*(?P<op>\L<op>)\s*(?P<source>(?P<imm>-?\d+)|{ident})\s*$".format(ident=Basic.ident), op=SELF_OPERATORS)
     INTRA_OPERATORS = ["+", "&"]
-    intra_op = regex.compile(r"^\s*(?P<target>[^\W\d]\w*)\s*=\s*(?P<s1>\w+)\s*(?P<op>\L<op>)\s*(?P<s2>(?P<imm>-?\d+)|\w+)\s*$", op=INTRA_OPERATORS)
+    intra_op = regex.compile(r"^\s*(?P<target>{ident})\s*=\s*(?P<s1>{ident})\s*(?P<op>\L<op>)\s*(?P<s2>(?P<imm>-?\d+)|{ident})\s*$".format(ident=Basic.ident), op=INTRA_OPERATORS)
 
     KEYWORDS = ["else", "end"]
     keyword_only = regex.compile(r"^\s*(?P<keyword>\L<w>)\s*$", w=KEYWORDS)
-    func_return = regex.compile(r"^\s*return\s*(?P<target>(?P<imm>-?\d+)|\w+)?\s*$")
-    start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>\w+)\s*$")
+    func_return = regex.compile(r"^\s*return\s*(?P<target>(?P<imm>{imm})|{ident})?\s*$".format(imm=Basic.imm, ident=Basic.ident))
+    start_statement = regex.compile(r"^(?P<keyword>start)\s+(?P<name>{ident})\s*$".format(ident=Basic.ident))
 
-    identifier = regex.compile(r"^(?!\d|_*$)\w+$")
-    imm = regex.compile(r"(?<![-\d])-?\d+\b")
+    identifier = regex.compile(r"^{}$".format(Basic.ident))
+    imm = regex.compile(Basic.imm)
 
     increase_level = [branch, loop]  # These statements increase cognitive depth
 
@@ -231,9 +236,9 @@ def compile_func(name, args, body, starting_lineno):
     for index, (key, value) in enumerate(localvars.items(), 1):
         vardict[key] = index
 
-    #########################################
-    ## Here comes the most exhaustive part ##
-    #########################################
+    ########################
+    ## Actual compilation ##
+    ########################
     from_else = {}
     from_end = {}
     loop_end = {}
@@ -242,8 +247,16 @@ def compile_func(name, args, body, starting_lineno):
         # Ignore comments
         if line.lstrip()[0] == "#":
             continue
+        # Reserved
+        elif line.lstrip()[0] == "$":
+            continue
+
         # Compile every single line
-        add_instruction(output, "; " + line.strip())
+        if RE.decl_vars.match(line):
+            add_instruction(output, "; " + line.strip(), "Variable declaration")
+            continue
+        else:
+            add_instruction(output, "; " + line.strip())
 
         match = RE.self_op.match(line)
         if match:
