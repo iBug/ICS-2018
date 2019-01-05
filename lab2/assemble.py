@@ -27,10 +27,10 @@ class RE:
 
     orig = re(r"(?i)^\.orig\s+(?P<orig>{})$".format(Basic.imm))
     end = re(r"(?i)^\.end$".format(Basic.imm))
-    label_only = re(r"^(?P<label>(?!{}|{}|{}){})$".format(traps, insts, Basic.imm, Basic.label))
+    label_only = re(r"^(?P<label>(?!(?:{}|{}|{})\b){})$".format(traps, insts, Basic.imm, Basic.label))
 
     inst = re(r"^((?P<label>{0})\s+)?(?P<inst>{1})(?:\s+(?P<s>{2}|{3}|{4})(?:{5}(?P<s>{2}|{3}|{4}))*)?$".format(Basic.label, insts, Basic.imm, Basic.reg, Basic.label, Basic.sep), flags=2)
-    directive = re(r"^(?P<label>{0})?\s*(?P<dir>{1})\s+(?P<s>{2}|{3})$".format(Basic.label, dirs, Basic.imm, Basic.string))
+    directive = re(r"^((?P<label>{0})\s+)?(?P<dir>{1})\s+(?P<s>{0}|{2}|{3})$".format(Basic.label, dirs, Basic.imm, Basic.string), flags=2)
 
 
 def lc3_int(s):
@@ -46,7 +46,7 @@ def lc3_int(s):
 def check_imm(val, width):
     if 0x8000 <= val < 0x10000:
         val -= 0x10000
-    if val >= 2 ** (width - 1) or val < -(2 ** (width - 1)):
+    if val >= 2 ** width or val < -(2 ** (width - 1)):
         raise ValueError("{} out of range for {}-bit immediate number".format(val, width))
     return val & (2 ** width - 1)
 
@@ -83,7 +83,8 @@ def parse_line(s):
         elif directive == ".BLKW":
             return (lc3_int(match.group("s")), label, directive, args)
         elif directive == ".STRINGZ":
-            string = literal_eval(match.group("s"))
+            string = literal_eval(match.group("s").replace(r"\e", "\x1B"))
+            args[0] = (args[0][0], args[0][1].replace(r"\e", "\x1B"))
             return (1 + len(string), label, directive, args)
 
     match = RE.inst.match(s)
@@ -236,10 +237,10 @@ def assemble_body(raw_lines, orig):
 
 
 def format_symbol_table(symbols):
-    header = "// Symbol table\n// Scope level 0:\n//  Symbol Name       Page Address\n//  ----------------  ------------\n"
+    header = "// Symbol table\n// Scope level 0:\n//\tSymbol Name       Page Address\n//\t----------------  ------------\n"
     ls = list(symbols.items())
     ls.sort(key=lambda x: x[1])
-    return header + "".join(["//  {}  {:04X}\n".format(name, addr) for name, addr in ls])
+    return header + "".join(["//\t{:16}  {:04X}\n".format(name, addr) for name, addr in ls])
 
 
 def main(args):
