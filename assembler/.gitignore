@@ -1,0 +1,7 @@
+__pycache__
+*.py[cdo]
+
+*.o
+*.obj
+*.s
+*.sym
